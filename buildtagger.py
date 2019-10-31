@@ -15,58 +15,53 @@ class LSTMTagger(nn.Module):
     def __init__(self, embedding_dim, hidden_dim, vocab_size, tagset_size):
         super(LSTMTagger, self).__init__()
         self.hidden_dim = hidden_dim
-
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim)
 
-        # The LSTM takes word embeddings as inputs, and outputs hidden states # with dimensionality hidden_dim.
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, bidirectional=True)
 
-        # The linear layer that maps from hidden state space to tag space
         self.hidden2tag = nn.Linear(hidden_dim*2, tagset_size)
 
-    def forward(self, sentence):
+    def forward(self, characters, sentence):
         embeds = self.word_embeddings(sentence)
         lstm_out, self.hidden = self.lstm(embeds.view(len(sentence), 1, -1))
         tag_space = self.hidden2tag(lstm_out.view(len(sentence), -1))
         tag_scores = F.log_softmax(tag_space, dim=1)
         return tag_scores
 
-class CNNCharEmbed(nn.Module):
-
-    def __init__(self, char_size, embedding_dim, convDim, ksize):
-        super(CNNCharEmbed, self).__init__()
-        
-        self.char_embeddings = nn.Embedding(char_size, embedding_dim)
-        
-        #Input channels = 3, output channels = 18
-        self.conv1 = nn.Conv1d(1, convDim, kernel_size = ksize, stride=1, padding=(ksize-1)/2)
-        self.pool = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        
-        #4608 input features, 64 output features (see sizing flow below)
-        self.fc1 = nn.Linear(convDim * embedding_dim/2 * embedding_dim/2, 32)
-        
-        #Make final output vector equal to word embeeding vector length?
-        self.fc2 = torch.nn.Linear(32, 16)
+class CNN(nn.Module):
+    def __init__(self, char_size, char_embed_dim, char_out_dim, wordLength):
+        super(FullTagger, self).__init__()
+               
+        self.char_embeddings = nn.Embedding(char_size, char_embed_dim,char_size)
+        self.conv1 = nn.Conv1d(1, convDim, kernel_size=3*char_embed_dim, stride=char_embed_dim, padding=char_embed_dim)
+        self.pool = nn.MaxPool1d(kernel_size=wordLength, padding=0)
+        self.fc1 = torch.nn.Linear(convDim * char_embed_dim/2, char_out_dim) 
      
     def forward(self, word):
-        embeds = self.word_embeddings(word)
-        
+        embeds = self.char_embeddings(word)
+        embeds = embeds.view(-1)
+        out = F.ReLU(self.conv1(embeds))
+        out = self.pool(out)
+        out = self.fc1(out)
+        return out
+      
 
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
     # use torch library to save model parameters, hyperparameters, etc. to model_file
     torch.manual_seed(1)
+    maxWordLength = 30
     
     infile = open(train_file)
     sents = infile.readlines()
     trainingData = []
     wordIndex = {}
     tagIndex = {}
-    letterIndex = {}
+    charIndex = {}
     reverseTagIndex = {}
     windex = 0
     tindex = 0
-    lindex = 0
+    cindex = 0
     for line in sents:
         line = line.rstrip().split()
         for i in range(0, len(line)):
@@ -79,26 +74,31 @@ def train_model(train_file, model_file):
                 tagIndex[word[1]] = tindex
                 reverseTagIndex[tindex] = word[1]
                 tindex += 1
+            for char in line[i]:
+                if char not in charIndex:
+                    charIndex[char] = cindex
+                    cindex += 1
         trainingData.append(([word[0] for word in line], [word[1] for word in line]))
     
     model = LSTMTagger(16, 16, len(wordIndex), len(tagIndex))
-    loss_function = nn.NLLLoss()
+    loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), 0.05)
 
     for epoch in range(1):
-        print(epoch)
-        model.zero_grad()
+        theloss = 0
+        print(epoch + "-------\n-------")
         for i in range(0, len(trainingData)):
             sentence = trainingData[i][0]
             tags = trainingData[i][1]
             # Step 1. Remember that Pytorch accumulates gradients.
             # We need to clear them out before each instance
-            
+            model.zero_grad()
 
             # Step 2. Get our inputs ready for the network, that is, turn them into
             # Tensors of word indices.
             sentence_in = prepareSequence(sentence, wordIndex)
             targets = prepareSequence(tags, tagIndex)
+            charRep = prepareChars(sentence, charIndex)
 
             # Step 3. Run our forward pass.
             tag_scores = model(sentence_in)
@@ -109,7 +109,9 @@ def train_model(train_file, model_file):
             loss.backward()
             optimizer.step()
             theloss += loss.item()
-        print(theloss)
+            if i % 1000 == 0:
+                print(theloss)
+                theloss = 0
 
     # See what the scores are after training
     with torch.no_grad():
@@ -125,6 +127,16 @@ def train_model(train_file, model_file):
 #take word 
 def prepareSequence(seq, toIndex):
     indices = [toIndex[w] for w in seq]
+    return torch.tensor(indices, dtype=torch.long)
+
+def prepareChars(sentence, charIndex):
+    indices = []
+    for w in sentence:
+        cindex = []
+        for i in range(0, len(w)):
+            cindex.append(charIndex[w[i]])
+        for i in range(len(w), maxWordLength):
+            cindex.append(len(charIndex))
     return torch.tensor(indices, dtype=torch.long)
 
 if __name__ == "__main__":
