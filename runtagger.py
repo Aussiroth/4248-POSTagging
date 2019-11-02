@@ -42,7 +42,7 @@ class CNN(nn.Module):
         self.conv_dim = conv_dim
         
         self.char_embeddings = nn.Embedding(char_size+1, char_embed_dim, char_size)
-        self.conv1 = nn.Conv1d(1, conv_dim, kernel_size=3*char_embed_dim, stride=char_embed_dim, padding=char_embed_dim)
+        self.conv1 = nn.Conv1d(1, conv_dim, kernel_size=5*char_embed_dim, stride=char_embed_dim, padding=2*char_embed_dim)
         self.pool = nn.MaxPool1d(kernel_size=word_length, padding=0)
      
     def forward(self, word):
@@ -67,7 +67,7 @@ def tag_sentence(test_file, model_file, out_file):
     maxWordLength = 20
     
     wordIndex, tagIndex, charIndex, model_state_dict = torch.load(model_file)
-    model = LSTMTagger(16, 16, len(wordIndex), len(tagIndex), len(charIndex), 16, 16, maxWordLength)
+    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 64, 64, maxWordLength)
     model.load_state_dict(model_state_dict)
     
     sents = infile.readlines()

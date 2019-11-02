@@ -4,11 +4,13 @@ import os
 import math
 import sys
 import datetime
+import time
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.data import Dataset
 
 class LSTMTagger(nn.Module):
 
@@ -43,7 +45,8 @@ class CNN(nn.Module):
         self.conv_dim = conv_dim
         
         self.char_embeddings = nn.Embedding(char_size+1, char_embed_dim, char_size)
-        self.conv1 = nn.Conv1d(1, conv_dim, kernel_size=3*char_embed_dim, stride=char_embed_dim, padding=char_embed_dim)
+        self.conv1 = nn.Conv1d(1, conv_dim, kernel_size=5*char_embed_dim, stride=char_embed_dim, padding=2*char_embed_dim)
+        nn.init.xavier_uniform_(self.conv1.weight)
         self.pool = nn.MaxPool1d(kernel_size=word_length, padding=0)
      
     def forward(self, word):
@@ -58,9 +61,9 @@ class CNN(nn.Module):
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
     # use torch library to save model parameters, hyperparameters, etc. to model_file
-    #torch.manual_seed(1)
-    
-    #device = torch.device('cpu')
+    torch.manual_seed(1)
+    #torch.backends.cudnn.benchmark = True
+    start_time = time.time()
     if (torch.cuda.is_available()):
         device = torch.device('cuda')
     else:
@@ -95,56 +98,64 @@ def train_model(train_file, model_file):
                         charIndex[char] = cindex
                         cindex += 1
         trainingData.append(([word[0] for word in line], [word[1] for word in line]))
-
-    model = LSTMTagger(16, 16, len(wordIndex), len(tagIndex), len(charIndex), 16, 16, maxWordLength).to(device)
+    
+    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 64, 64, maxWordLength).to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), 0.1)
 
-    for epoch in range(1):
+    sentence_tensors = []
+    tag_tensors = []
+    char_tensors = []
+    for i in range(0, len(trainingData)):
+        sentence = trainingData[i][0]
+        tags = trainingData[i][1]
+        sentence_t = prepareWords(sentence, wordIndex, device)
+        tag_t = prepareTags(tags, tagIndex, device)
+        char_t= prepareChars(sentence, charIndex, maxWordLength, device)
+        sentence_tensors.append(sentence_t)
+        tag_tensors.append(tag_t)
+        char_tensors.append(char_t)
+
+    for epoch in range(5):
         theloss = 0
         for i in range(0, len(trainingData)):
+            if (time.time() - start_time > 540):
+                break
             sentence = trainingData[i][0]
             tags = trainingData[i][1]
             
             model.zero_grad()
-            
-            sentence_in = prepareSequence(sentence, wordIndex, device)
-            targets = prepareSequence(tags, tagIndex, device)
-            charRep = prepareChars(sentence, charIndex, maxWordLength, device)
 
-            tag_scores = model(charRep, sentence_in)
+            tag_scores = model(char_tensors[i], sentence_tensors[i])
 
-            loss = loss_function(tag_scores, targets)
+            loss = loss_function(tag_scores, tag_tensors[i])
             loss.backward()
-            theloss += loss.item()
+            #theloss += loss.item()
             
             optimizer.step()
+            del loss
             
-            if (i % 1000 == 0):
-                print(i, theloss)
-                theloss = 0
+            #if (i % 1000 == 0):
+            #    print(i, theloss)
+            #    theloss = 0
             
             
     #save to file
     torch.save((wordIndex, reverseTagIndex, charIndex, model.state_dict()), model_file)
     print('Finished...')
 
-#take word or tag
-def prepareSequence(seq, toIndex, device):
+def prepareTags(seq, toIndex, device):
     indices = [toIndex[w] for w in seq]
-    return torch.tensor(indices, dtype=torch.long).to(device)
+    return torch.tensor(indices, dtype=torch.long).to(device, non_blocking=True)
 
-def prepareWords(sentences, maxWords, wordIndex):
-    result = []
-    for i in range(0, maxWords):
-        cindex = []
-        for j in range(0, len(sentences)):
-            if i < len(sentences[j]):
-                cindex.append(wordIndex[sentences[j][i]])
-            else:
-                cindex.append(len(wordIndex))
-        result.append(cindex)
-    return result
+def prepareWords(word, wordIndex, device):
+    indices = []
+    for w in word:
+        if w in wordIndex:
+            indices.append(wordIndex[w])
+        else:
+            indices.append(len(wordIndex))
+    return torch.tensor(indices, dtype=torch.long).to(device, non_blocking=True)
 
 def prepareChars(sentence, charIndex, maxWordLength, device):
     indices = []
@@ -162,7 +173,7 @@ def prepareChars(sentence, charIndex, maxWordLength, device):
         for i in range(len(w), maxWordLength):
             cindex.append(len(charIndex))
         indices.append(cindex)
-    return torch.tensor(indices, dtype=torch.long).to(device)
+    return torch.tensor(indices, dtype=torch.long).to(device, non_blocking=True)
 
 if __name__ == "__main__":
     # make no changes here
