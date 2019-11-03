@@ -61,7 +61,7 @@ class CNN(nn.Module):
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
     # use torch library to save model parameters, hyperparameters, etc. to model_file
-    torch.manual_seed(1)
+    torch.manual_seed(13)
     #torch.backends.cudnn.benchmark = True
     start_time = time.time()
     if (torch.cuda.is_available()):
@@ -99,7 +99,7 @@ def train_model(train_file, model_file):
                         cindex += 1
         trainingData.append(([word[0] for word in line], [word[1] for word in line]))
     
-    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 64, 64, maxWordLength).to(device)
+    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength).to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), 0.1)
 
@@ -116,13 +116,11 @@ def train_model(train_file, model_file):
         tag_tensors.append(tag_t)
         char_tensors.append(char_t)
 
-    for epoch in range(5):
+    for epoch in range(2):
         theloss = 0
         for i in range(0, len(trainingData)):
             if (time.time() - start_time > 540):
                 break
-            sentence = trainingData[i][0]
-            tags = trainingData[i][1]
             
             model.zero_grad()
 
@@ -133,7 +131,6 @@ def train_model(train_file, model_file):
             #theloss += loss.item()
             
             optimizer.step()
-            del loss
             
             #if (i % 1000 == 0):
             #    print(i, theloss)

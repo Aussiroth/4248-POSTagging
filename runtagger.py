@@ -3,6 +3,7 @@
 import os
 import math
 import sys
+import datetime
 
 import torch
 import torch.nn as nn
@@ -67,7 +68,7 @@ def tag_sentence(test_file, model_file, out_file):
     maxWordLength = 20
     
     wordIndex, tagIndex, charIndex, model_state_dict = torch.load(model_file)
-    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 64, 64, maxWordLength)
+    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength)
     model.load_state_dict(model_state_dict)
     
     sents = infile.readlines()
@@ -119,4 +120,7 @@ if __name__ == "__main__":
     test_file = sys.argv[1]
     model_file = sys.argv[2]
     out_file = sys.argv[3]
+    start_time = datetime.datetime.now()
     tag_sentence(test_file, model_file, out_file)
+    end_time = datetime.datetime.now()
+    print('Time:', end_time - start_time)
