@@ -68,7 +68,7 @@ def tag_sentence(test_file, model_file, out_file):
     maxWordLength = 20
     
     wordIndex, tagIndex, charIndex, model_state_dict = torch.load(model_file)
-    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength)
+    model = LSTMTagger(128, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength)
     model.load_state_dict(model_state_dict)
     
     sents = infile.readlines()

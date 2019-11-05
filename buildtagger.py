@@ -25,7 +25,8 @@ class LSTMTagger(nn.Module):
         self.word_embeddings = nn.Embedding(vocab_size+1, embedding_dim, vocab_size)
 
         self.lstm = nn.LSTM(embedding_dim + conv_dim, hidden_dim, bidirectional=True)
-
+        self.lstm.bias_ih_l0.data.fill_(0)
+        self.dropout = nn.Dropout(p=0.5)
         self.hidden2tag = nn.Linear(hidden_dim*2, tagset_size)
 
     def forward(self, characters, sentence):
@@ -34,6 +35,7 @@ class LSTMTagger(nn.Module):
         embeds = torch.cat((embeds, charTensors), dim=1)
         
         lstm_out, self.hidden = self.lstm(embeds.view(len(sentence), 1, -1))
+        lstm_out = self.dropout(lstm_out)
         tag_pred = self.hidden2tag(lstm_out.view(len(sentence), -1))
         return tag_pred
 
@@ -46,6 +48,7 @@ class CNN(nn.Module):
         
         self.char_embeddings = nn.Embedding(char_size+1, char_embed_dim, char_size)
         self.conv1 = nn.Conv1d(1, conv_dim, kernel_size=5*char_embed_dim, stride=char_embed_dim, padding=2*char_embed_dim)
+        nn.init.xavier_uniform_(self.char_embeddings.weight)
         nn.init.xavier_uniform_(self.conv1.weight)
         self.pool = nn.MaxPool1d(kernel_size=word_length, padding=0)
      
@@ -61,7 +64,7 @@ class CNN(nn.Module):
 def train_model(train_file, model_file):
     # write your code here. You can add functions as well.
     # use torch library to save model parameters, hyperparameters, etc. to model_file
-    torch.manual_seed(13)
+    torch.manual_seed(1)
     #torch.backends.cudnn.benchmark = True
     start_time = time.time()
     if (torch.cuda.is_available()):
@@ -99,9 +102,9 @@ def train_model(train_file, model_file):
                         cindex += 1
         trainingData.append(([word[0] for word in line], [word[1] for word in line]))
     
-    model = LSTMTagger(96, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength).to(device)
+    model = LSTMTagger(128, 96, len(wordIndex), len(tagIndex), len(charIndex), 32, 64, maxWordLength).to(device)
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), 0.1)
+    optimizer = optim.Adam(model.parameters(), 0.001)
 
     sentence_tensors = []
     tag_tensors = []
@@ -116,10 +119,10 @@ def train_model(train_file, model_file):
         tag_tensors.append(tag_t)
         char_tensors.append(char_t)
 
-    for epoch in range(2):
+    for epoch in range(1):
         theloss = 0
         for i in range(0, len(trainingData)):
-            if (time.time() - start_time > 540):
+            if (time.time() - start_time > 530):
                 break
             
             model.zero_grad()
