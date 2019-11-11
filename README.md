@@ -1,5 +1,7 @@
-# 4248-POSTagging
+POS Tagging using 2 approaches.
 
-Implementing part of speech tagging with a biRNN using LSTM.
+1. Viterbi algorithm with a hidden markov model
 
-Further, words are represented as vectors via word2vec as well as a character-based vector obtained via a CNN over character embeddings
+2. A Convolutional Neural Network over character embeddings, combined with an LSTM for tag prediction.
+
+Neither approach is optimal, e.g. Consider dynamic suffix lengths for the viterbi algorithm, and batch LSTM training for the neural network approach.
